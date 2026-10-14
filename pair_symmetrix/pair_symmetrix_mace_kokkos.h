@@ -104,6 +104,7 @@ class PairSymmetrixMACEKokkos : public Pair, public KokkosBase {
   double execution_geometry_refresh_count = 0.0;
   double execution_geometry_only_update_count = 0.0;
   double execution_h1_allocation_count = 0.0;
+  std::string last_capacity_report_key;
   double execution_mpi_staged_packet_d2h_bytes = 0.0;
   double execution_mpi_staged_packet_h2d_bytes = 0.0;
   double execution_mpi_staged_index_h2d_bytes = 0.0;
@@ -142,6 +143,7 @@ class PairSymmetrixMACEKokkos : public Pair, public KokkosBase {
   virtual void allocate();
   void ensure_legacy_comm_capacity(std::size_t, std::size_t);
   int checked_comm_value_count(std::size_t, const char *);
+  bool capacity_report_due();
 
  private:
   DAT::ttransform_kkacc_1d k_eatom;

@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <sstream>
@@ -685,6 +686,36 @@ void PairSymmetrixMACEKokkos<DeviceType, Precision>::ensure_legacy_comm_capacity
     Kokkos::realloc(legacy_comm_indices, num_indices);
   if (legacy_comm_packet.extent(0) < num_values)
     Kokkos::realloc(legacy_comm_packet, num_values);
+}
+
+/* ----------------------------------------------------------------------
+   The per-rank graph capacity report is printed on every topology rebuild.
+   With SYMMETRIX_CAPACITY_LOG=changes it is only printed when some rank's
+   planned capacity, plan or allocation counts change, which keeps long runs'
+   logs small. Collective: every rank must call this.
+------------------------------------------------------------------------- */
+
+template<class DeviceType, typename Precision>
+bool PairSymmetrixMACEKokkos<DeviceType, Precision>::capacity_report_due()
+{
+  const char *mode = std::getenv("SYMMETRIX_CAPACITY_LOG");
+  if (mode == nullptr || std::strcmp(mode, "changes") != 0)
+    return true;
+  std::ostringstream key;
+  key << mace->execution_planned_receiver_capacity() << ','
+      << mace->execution_planned_feature_node_capacity() << ','
+      << mace->execution_planned_edge_capacity() << ','
+      << mace->execution_planned_capacity_bytes() << ','
+      << mace->execution_plan_report().selected_id << ','
+      << mace->factorized_graph_device_replacement_count << ','
+      << mace->execution_geometry_allocation_count << ','
+      << mace->execution_result_allocation_count_value() << ','
+      << mace->mh0_m0_adjoint_allocation_count_value() << ','
+      << execution_h1_allocation_count;
+  int changed = key.str() != last_capacity_report_key;
+  last_capacity_report_key = key.str();
+  MPI_Allreduce(MPI_IN_PLACE, &changed, 1, MPI_INT, MPI_LOR, world);
+  return changed != 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1567,7 +1598,7 @@ void PairSymmetrixMACEKokkos<DeviceType, Precision>::compute_mpi_message_passing
         }
       }
     }
-    if (rebuild_topology) {
+    if (rebuild_topology && capacity_report_due()) {
       std::ostringstream capacity_message;
       capacity_message
         << "Symmetrix rank " << comm->me
